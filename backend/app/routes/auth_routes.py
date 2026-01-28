@@ -1,3 +1,73 @@
+# from flask import Blueprint, request, jsonify
+# from ..models.user import User
+# from ..extensions import db
+# from werkzeug.security import generate_password_hash, check_password_hash
+# from flask_jwt_extended import create_access_token
+# from sqlalchemy.exc import IntegrityError
+
+# auth_bp = Blueprint("auth", __name__)
+
+# # @auth_bp.route("/register", methods=["POST"])
+# # def register():
+# #     data = request.get_json()
+# #     hashed_pw = generate_password_hash(data["password"])
+
+# #     user = User(username=data["username"], password=hashed_pw, role=data["role"])
+# #     db.session.add(user)
+# #     db.session.commit()
+
+# #     return jsonify({"message": "User created"}), 201
+# @auth_bp.route("/register", methods=["POST"])
+# def register():
+#     data = request.get_json()
+
+#     if not data.get("username") or not data.get("password"):
+#         return jsonify({"error": "Missing credentials"}), 400
+
+#     hashed_pw = generate_password_hash(data["password"])
+#     user = User(username=data["username"], password=hashed_pw, role=data["role"])
+
+#     try:
+#         db.session.add(user)
+#         db.session.commit()
+#     except IntegrityError:
+#         db.session.rollback()
+#         return jsonify({"error": "Username already exists"}), 400
+
+#     return jsonify({"message": "User created"}), 201
+
+# @auth_bp.route("/login", methods=["POST"])
+# def login():
+#     data = request.get_json()
+#     user = User.query.filter_by(username=data["username"]).first()
+
+#     if not user or not check_password_hash(user.password, data["password"]):
+#         return jsonify({"error": "Invalid credentials"}), 401
+
+#     # token = create_access_token(identity={"username": user.username, "role": user.role})
+#     token = create_access_token(identity=user.username, additional_claims={"role": user.role})
+
+#     return jsonify(access_token=token)
+
+# @auth_bp.route("/reset_admin", methods=["POST"])
+# def reset_admin():
+#     user = User.query.filter_by(username="admin1").first()
+#     if user:
+#         user.password = generate_password_hash("1234")
+#         db.session.commit()
+#     return {"message": "admin reset"}
+
+# @auth_bp.route("/debug_check")
+# def debug_check():
+#     from werkzeug.security import check_password_hash
+#     user = User.query.filter_by(username="admin1").first()
+#     if not user:
+#         return {"exists": False}
+#     return {
+#         "exists": True,
+#         "hash": user.password,
+#         "match_1234": check_password_hash(user.password, "1234")
+#     }
 from flask import Blueprint, request, jsonify
 from ..models.user import User
 from ..extensions import db
@@ -7,25 +77,20 @@ from sqlalchemy.exc import IntegrityError
 
 auth_bp = Blueprint("auth", __name__)
 
-# @auth_bp.route("/register", methods=["POST"])
-# def register():
-#     data = request.get_json()
-#     hashed_pw = generate_password_hash(data["password"])
-
-#     user = User(username=data["username"], password=hashed_pw, role=data["role"])
-#     db.session.add(user)
-#     db.session.commit()
-
-#     return jsonify({"message": "User created"}), 201
+# ---------------- REGISTER ----------------
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json() or {}
 
-    if not data.get("username") or not data.get("password"):
+    username = data.get("username")
+    password = data.get("password")
+    role = data.get("role", "student")  # default role
+
+    if not username or not password:
         return jsonify({"error": "Missing credentials"}), 400
 
-    hashed_pw = generate_password_hash(data["password"])
-    user = User(username=data["username"], password=hashed_pw, role=data["role"])
+    hashed_pw = generate_password_hash(password)
+    user = User(username=username, password=hashed_pw, role=role)
 
     try:
         db.session.add(user)
@@ -36,35 +101,54 @@ def register():
 
     return jsonify({"message": "User created"}), 201
 
+
+# ---------------- LOGIN ----------------
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    user = User.query.filter_by(username=data["username"]).first()
+    data = request.get_json() or {}
 
-    if not user or not check_password_hash(user.password, data["password"]):
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"error": "Missing credentials"}), 400
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user or not check_password_hash(user.password, password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    # token = create_access_token(identity={"username": user.username, "role": user.role})
-    token = create_access_token(identity=user.username, additional_claims={"role": user.role})
+    token = create_access_token(
+        identity=user.username,
+        additional_claims={"role": user.role}
+    )
 
-    return jsonify(access_token=token)
+    return jsonify(access_token=token), 200
 
+
+# ---------------- FORCE RESET ADMIN PASSWORD ----------------
 @auth_bp.route("/reset_admin", methods=["POST"])
 def reset_admin():
     user = User.query.filter_by(username="admin1").first()
-    if user:
-        user.password = generate_password_hash("1234")
-        db.session.commit()
-    return {"message": "admin reset"}
 
-@auth_bp.route("/debug_check")
-def debug_check():
-    from werkzeug.security import check_password_hash
-    user = User.query.filter_by(username="admin1").first()
     if not user:
-        return {"exists": False}
-    return {
+        return jsonify({"error": "admin1 not found"}), 404
+
+    user.password = generate_password_hash("1234")
+    db.session.commit()
+
+    return jsonify({"message": "admin password reset to 1234"}), 200
+
+
+# ---------------- DEBUG PASSWORD CHECK ----------------
+@auth_bp.route("/debug_check", methods=["GET"])
+def debug_check():
+    user = User.query.filter_by(username="admin1").first()
+
+    if not user:
+        return jsonify({"exists": False}), 404
+
+    return jsonify({
         "exists": True,
-        "hash": user.password,
         "match_1234": check_password_hash(user.password, "1234")
-    }
+    }), 200
