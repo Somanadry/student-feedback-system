@@ -56,3 +56,15 @@ def reset_admin():
         user.password = generate_password_hash("1234")
         db.session.commit()
     return {"message": "admin reset"}
+
+@auth_bp.route("/debug_check")
+def debug_check():
+    from werkzeug.security import check_password_hash
+    user = User.query.filter_by(username="admin1").first()
+    if not user:
+        return {"exists": False}
+    return {
+        "exists": True,
+        "hash": user.password,
+        "match_1234": check_password_hash(user.password, "1234")
+    }
