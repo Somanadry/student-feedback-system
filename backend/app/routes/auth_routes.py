@@ -3,17 +3,36 @@ from ..models.user import User
 from ..extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
+from sqlalchemy.exc import IntegrityError
 
 auth_bp = Blueprint("auth", __name__)
 
+# @auth_bp.route("/register", methods=["POST"])
+# def register():
+#     data = request.get_json()
+#     hashed_pw = generate_password_hash(data["password"])
+
+#     user = User(username=data["username"], password=hashed_pw, role=data["role"])
+#     db.session.add(user)
+#     db.session.commit()
+
+#     return jsonify({"message": "User created"}), 201
 @auth_bp.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    hashed_pw = generate_password_hash(data["password"])
 
+    if not data.get("username") or not data.get("password"):
+        return jsonify({"error": "Missing credentials"}), 400
+
+    hashed_pw = generate_password_hash(data["password"])
     user = User(username=data["username"], password=hashed_pw, role=data["role"])
-    db.session.add(user)
-    db.session.commit()
+
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Username already exists"}), 400
 
     return jsonify({"message": "User created"}), 201
 
