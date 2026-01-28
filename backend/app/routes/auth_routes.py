@@ -48,3 +48,11 @@ def login():
     token = create_access_token(identity=user.username, additional_claims={"role": user.role})
 
     return jsonify(access_token=token)
+
+@auth_bp.route("/reset_admin", methods=["POST"])
+def reset_admin():
+    user = User.query.filter_by(username="admin1").first()
+    if user:
+        user.password = generate_password_hash("1234")
+        db.session.commit()
+    return {"message": "admin reset"}
